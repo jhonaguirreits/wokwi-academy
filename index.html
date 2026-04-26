@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Wokwi Academy | Auto-Grader Pro + Nube</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0d1117; --panel-bg: #161b22; --border-color: #30363d;
+            --wokwi-blue: #2f81f7; --text-light: #c9d1d9; --text-muted: #8b949e;
+            --accent: #238636; --accent-hover: #2ea043;
+            --nivel-basico: #3182ce; --nivel-alto: #d69e2e; --nivel-superior: #e53e3e;
+            --error-color: #f85149;
+            --glow-primary: 0 0 15px rgba(47, 129, 247, 0.4);
+            --glow-success: 0 0 20px rgba(35, 134, 54, 0.6);
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color: var(--bg-dark); color: var(--text-light); margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: var(--bg-dark); } ::-webkit-scrollbar-thumb { background: #484f58; border-radius: 4px; }
+        
+        /* SISTEMA DE PANTALLAS */
+        .screen { display: none; width: 100%; height: 100%; animation: fadeIn 0.4s ease; }
+        .screen.active { display: flex; flex-direction: column; }
+        
+        /* PANTALLA LOGIN */
+        .login-container { margin: auto; background: var(--panel-bg); padding: 40px; border-radius: 12px; border: 1px solid var(--border-color); text-align: center; max-width: 400px; box-shadow: var(--glow-primary); }
+        .login-container h1 { color: var(--wokwi-blue); margin-bottom: 10px; font-size: 1.8rem;}
+        .login-container p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 25px;}
+        .btn-google { background-color: white; color: #444; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; border: none; font-size: 1rem; transition: 0.3s; }
+        .btn-google:hover { background-color: #f1f1f1; transform: translateY(-2px); }
+        .btn-google img { width: 24px; }
+
+        /* PANTALLA APP */
+        header { padding: 15px 30px; background: var(--panel-bg); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .header-title { font-size: 1.2rem; font-weight: bold; color: var(--wokwi-blue); display: flex; align-items: center; gap: 15px;}
+        .user-badge { background: #21262d; padding: 5px 15px; border-radius: 20px; font-size: 0.85rem; color: var(--text-light); border: 1px solid var(--border-color); display: flex; gap: 15px; align-items: center;}
+        .xp-text { color: var(--nivel-alto); font-weight: bold; }
+        .btn-logout { background: transparent; color: var(--error-color); border: 1px solid var(--error-color); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; transition: 0.2s;}
+        .btn-logout:hover { background: var(--error-color); color: white;}
+        .week-selector { background: var(--bg-dark); color: white; border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; font-size: 0.95rem; cursor: pointer; outline: none; }
+        
+        .main-container { display: grid; grid-template-columns: 480px 1fr; gap: 20px; padding: 20px; flex: 1; overflow: hidden; }
+        .left-panel { display: flex; flex-direction: column; gap: 20px; overflow-y: auto; padding-right: 10px; }
+        
+        .card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
+        h2 { margin-top: 0; color: var(--text-light); font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center;}
+        h3 { color: var(--wokwi-blue); font-size: 1rem; margin-bottom: 10px; margin-top: 20px;}
+
+        .instruction-box { background: rgba(35, 134, 54, 0.15); border-left: 4px solid var(--accent); padding: 15px; margin: 10px 0; border-radius: 0 6px 6px 0; font-size: 0.95rem; line-height: 1.5;}
+        .tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .tag { background: rgba(47, 129, 247, 0.1); color: var(--wokwi-blue); padding: 5px 12px; border-radius: 15px; font-size: 0.85rem; border: 1px solid rgba(47, 129, 247, 0.4); }
+        ul { margin-top: 10px; padding-left: 20px; font-size: 0.95rem; color: var(--text-muted); }
+        
+        .code-container { position: relative; margin-top: 10px; }
+        .code-block { background: #0d1117; padding: 15px; border-radius: 6px; border: 1px solid var(--border-color); font-family: 'Consolas', monospace; font-size: 0.85rem; color: var(--text-muted); overflow-x: auto; white-space: pre-wrap; margin: 0; }
+        .btn-copy { position: absolute; top: 10px; right: 10px; background: #21262d; border: 1px solid var(--border-color); color: var(--text-light); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+        
+        /* Auto-Grader UI */
+        .reto-container { margin-bottom: 15px; animation: fadeIn 0.4s; }
+        .reto-box { padding: 15px; border-radius: 6px; font-size: 0.95rem; line-height: 1.5; background: #0d1117; border-left: 5px solid; }
+        .reto-basico { border-left-color: var(--nivel-basico); } .reto-alto { border-left-color: var(--nivel-alto); } .reto-superior { border-left-color: var(--nivel-superior); }
+        .reto-titulo { font-weight: bold; margin-bottom: 8px; }
+        
+        .evaluator-box { background: #21262d; padding: 15px; border-radius: 0 0 6px 6px; border: 1px solid var(--border-color); border-top: none; }
+        
+        .eval-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.85rem; color: var(--text-muted); font-weight: bold;}
+        .vidas-display { letter-spacing: 2px; font-size: 1.1rem; }
+
+        .code-input { width: 100%; height: 120px; background: #0d1117; color: var(--text-light); border: 1px solid #30363d; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 0.85rem; resize: vertical; box-sizing: border-box; outline: none;}
+        .code-input:focus { border-color: var(--wokwi-blue); }
+        
+        .btn-verify { background: var(--accent); color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px; width: 100%; transition: 0.2s;}
+        .btn-verify:hover { background: var(--accent-hover); box-shadow: 0 0 10px rgba(35, 134, 54, 0.4);}
+        .btn-verify:disabled { background: #484f58; cursor: not-allowed; color: #8b949e; box-shadow: none;}
+        
+        .feedback { margin-top: 10px; font-size: 0.85rem; font-weight: bold; display: none; padding: 15px; border-radius: 4px; line-height: 1.5;}
+        .feedback.error { background: rgba(248, 81, 73, 0.1); color: var(--error-color); border: 1px solid rgba(248, 81, 73, 0.4); display: block;}
+        .feedback.success { background: rgba(35, 134, 54, 0.1); color: var(--accent); border: 1px solid rgba(35, 134, 54, 0.4); display: block;}
+        .feedback.loading { background: rgba(47, 129, 247, 0.1); color: var(--wokwi-blue); border: 1px solid rgba(47, 129, 247, 0.4); display: block;}
+        
+        .msg-pedagogico { display: block; margin-top: 8px; font-style: italic; opacity: 0.9; }
+        .completed-badge { display: flex; align-items: center; justify-content: center; background: rgba(35, 134, 54, 0.1); color: var(--accent); padding: 10px; border-radius: 0 0 6px 6px; font-weight: bold; border: 1px solid var(--border-color); border-top: none;}
+
+        .btn-action { background: rgba(47, 129, 247, 0.1); border: 1px solid rgba(47, 129, 247, 0.4); color: var(--wokwi-blue); padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: 0.2s; margin-left: 10px;}
+        .btn-action:hover { background: var(--wokwi-blue); color: white;}
+        .btn-reset { color: var(--error-color); border-color: rgba(248, 81, 73, 0.4); background: rgba(248, 81, 73, 0.1);}
+        .btn-reset:hover { background: var(--error-color); color: white;}
+
+        .wokwi-container { border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; background: #1e1e1e; }
+        iframe { width: 100%; height: 100%; border: none; }
+        
+        .toast { position: fixed; top: 20px; right: 20px; background: var(--accent); color: white; padding: 15px; border-radius: 8px; display: none; font-weight: bold; z-index: 1000; box-shadow: var(--glow-success); animation: fadeIn 0.3s;}
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div id="toast-msg" class="toast">✅ Sincronizado con la nube</div>
+
+    <div id="screen-login" class="screen active">
+        <div class="login-container">
+            <h1>Wokwi Academy</h1>
+            <p>Evaluador Automático Pro.<br>Tu código, guardado en la nube de Google.</p>
+            <button onclick="loginConGoogle()" class="btn-google">
+                <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google">
+                Iniciar sesión con Google
+            </button>
+            <div id="loading-login" style="display: none; margin-top: 15px; color: var(--nivel-alto); font-size: 0.9rem;">
+                ⏳ Conectando con los servidores...
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-app" class="screen">
+        <header>
+            <div class="header-title">
+                Wokwi Academy
+                <div class="user-badge">
+                    <span id="ui-name">Jugador</span>
+                    <span class="xp-text"><span id="ui-score">0</span> XP</span>
+                    <button class="btn-logout" onclick="logout()">Salir</button>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 15px;">
+                <button id="btn-cert" onclick="generatePDF()" class="btn-action" style="margin: 0;">📄 Descargar Reporte</button>
+                <select class="week-selector" id="week-select" onchange="loadWeek()">
+                    <option value="1">Semana 1: Primer Contacto (LED)</option>
+                    <option value="2">Semana 2: Semáforo Inteligente</option>
+                    <option value="3">Semana 3: Botón de Pánico</option>
+                    <option value="4">Semana 4: Dimmer Analógico</option>
+                    <option value="5">Semana 5: Sintetizador (Buzzer)</option>
+                    <option value="6">Semana 6: Radar Automotriz</option>
+                    <option value="7">Semana 7: Barrera de Peaje</option>
+                    <option value="8">Semana 8: Estación Climática</option>
+                    <option value="9">Semana 9: Panel Publicitario</option>
+                    <option value="10">SEMANA 10: BOSS FINAL</option>
+                </select>
+            </div>
+        </header>
+
+        <div class="main-container">
+            <div class="left-panel">
+                
+                <div class="card">
+                    <h2 id="w-title">Misión</h2>
+                    <h3>🎯 El Reto (Misión)</h3><div id="w-challenge" class="instruction-box"></div>
+                    <h3>📦 Componentes</h3><div id="w-components" class="tags-container"></div>
+                    <h3>🔌 Conexiones</h3><ul id="w-wiring"></ul>
+                </div>
+
+                <div class="card">
+                    <h2>💻 Código Base</h2>
+                    <div class="code-container">
+                        <button class="btn-copy" onclick="copyCode()" id="btnCopy">📋 Copiar</button>
+                        <div class="code-block" id="w-code"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>
+                        🚀 Ruta de Mejora 
+                        <button class="btn-action btn-reset" onclick="resetProgress()">Reiniciar Nivel</button>
+                    </h2>
+                    <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px;">
+                        Cuentas con <strong>3 vidas</strong> por reto. Escribe tu código evaluando la lógica paso a paso.
+                    </div>
+
+                    <div id="r-container-basico" class="reto-container">
+                        <div class="reto-box reto-basico"><div class="reto-titulo" style="color:var(--nivel-basico)">🔵 Nivel Básico (+50 XP)</div><div id="r-desc-basico"></div></div>
+                        <div id="eval-basico" class="evaluator-box">
+                            <div class="eval-header"><span>Analizador de Código</span> <span id="vidas-basico" class="vidas-display">❤️❤️❤️</span></div>
+                            <textarea id="input-basico" class="code-input" placeholder="Pega tu código modificado aquí..."></textarea>
+                            <button id="btn-basico" class="btn-verify" onclick="verifyCode('basico')">Verificar Código</button>
+                            <div id="feedback-basico" class="feedback"></div>
+                        </div>
+                        <div id="done-basico" class="completed-badge" style="display:none;">✅ ¡Nivel Completado!</div>
+                    </div>
+
+                    <div id="r-container-alto" class="reto-container" style="display:none;">
+                        <div class="reto-box reto-alto"><div class="reto-titulo" style="color:var(--nivel-alto)">🟠 Nivel Alto (+100 XP)</div><div id="r-desc-alto"></div></div>
+                        <div id="eval-alto" class="evaluator-box">
+                            <div class="eval-header"><span>Analizador de Código</span> <span id="vidas-alto" class="vidas-display">❤️❤️❤️</span></div>
+                            <textarea id="input-alto" class="code-input" placeholder="Pega tu código modificado aquí..."></textarea>
+                            <button id="btn-alto" class="btn-verify" onclick="verifyCode('alto')">Verificar Código</button>
+                            <div id="feedback-alto" class="feedback"></div>
+                        </div>
+                        <div id="done-alto" class="completed-badge" style="display:none;">✅ ¡Nivel Completado!</div>
+                    </div>
+
+                    <div id="r-container-superior" class="reto-container" style="display:none;">
+                        <div class="reto-box reto-superior"><div class="reto-titulo" style="color:var(--nivel-superior)">🔴 Nivel Superior (+200 XP)</div><div id="r-desc-superior"></div></div>
+                        <div id="eval-superior" class="evaluator-box">
+                            <div class="eval-header"><span>Analizador de Código</span> <span id="vidas-superior" class="vidas-display">❤️❤️❤️</span></div>
+                            <textarea id="input-superior" class="code-input" placeholder="Pega tu código modificado aquí..."></textarea>
+                            <button id="btn-superior" class="btn-verify" onclick="verifyCode('superior')">Enfrentar al Boss</button>
+                            <div id="feedback-superior" class="feedback"></div>
+                        </div>
+                        <div id="done-superior" class="completed-badge" style="display:none;">🏆 ¡BOSS DERROTADO!</div>
+                    </div>
+                    
+                    <div id="msg-victoria" style="text-align: center; color: var(--accent); font-weight: bold; margin-top: 15px; display: none; font-size: 1.1rem;">
+                        🚀 ¡Semana completada con éxito! Selecciona la siguiente misión arriba.
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="wokwi-container">
+                <iframe src="https://wokwi.com/projects/new/arduino-uno?embed=1" title="Simulador Wokwi"></iframe>
+            </div>
+        </div>
+    </div>
+
+<script>
+    /* ========================================================================= */
+    /* 1. SISTEMA DE AUDIO SEGURO                                                */
+    /* ========================================================================= */
+    let audioCtx;
+    function initAudio() { try { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
+    function playSound(type) {
+        try {
+            if(!audioCtx) return;
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator(); const gainNode = audioCtx.createGain();
+            osc.connect(gainNode); gainNode.connect(audioCtx.destination);
+            if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); 
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); 
+                osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); 
+                osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime + 0.3); 
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.3);
+            }
+        } catch(e) {}
+    }
+    function safeConfetti() { try { if (typeof confetti === 'function') confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } }); } catch (e) {} }
+
+    /* ========================================================================= */
+    /* 2. CONFIGURACIÓN EXACTA DE FIREBASE                                       */
+    /* ========================================================================= */
+    const firebaseConfig = {
+        apiKey: "AIzaSyDNBy-QKS5eNSinEI5ROOhR94YGKvbA0cg",
+        authDomain: "codequestpro-78796.firebaseapp.com",
+        projectId: "codequestpro-78796",
+        storageBucket: "codequestpro-78796.firebasestorage.app",
+        messagingSenderId: "383335669814",
+        appId: "1:383335669814:web:70d1fd4e04b77aca63f897"
+    };
+    if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+    const auth = firebase.auth(); const firestore = firebase.firestore();
+
+    /* ========================================================================= */
+    /* 3. LÓGICA DE USUARIOS Y NUBE                                              */
+    /* ========================================================================= */
+    let user = null;
+    let currentLvlIndex = 0; 
+    let currentLives = 3;
+    const levels = ['basico', 'alto', 'superior'];
+
+    function loginConGoogle() {
+        initAudio();
+        document.getElementById('loading-login').style.display = 'block';
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).then((result) => {
+            cargarDatosDeLaNube(result.user);
+        }).catch((error) => {
+            document.getElementById('loading-login').style.display = 'none';
+            alert("❌ Error al iniciar sesión. Asegúrate de estar en GitHub Pages.");
+        });
+    }
+
+    function cargarDatosDeLaNube(googleUser) {
+        if (!googleUser || !googleUser.email) return;
+
+        firestore.collection("estudiantes").doc(googleUser.email).get().then((doc) => {
+            if (doc.exists) {
+                user = doc.data();
+                if(!user.progress) user.progress = {}; // Asegurar que exista el objeto de progreso
+                bienvenidaUsuario();
+            } else {
+                let gradoEstudiante = prompt("¡Bienvenido a Wokwi Academy! Ingresa tu curso/grado (Ej: 1001, 702):");
+                user = {
+                    email: googleUser.email,
+                    nombres: googleUser.displayName || "Estudiante",
+                    grado: gradoEstudiante || "N/A",
+                    score: 0,
+                    progress: {} // Estructura: { "1": { lvl: 0, lives: 3 }, "2": ... }
+                };
+                guardarProgresoEnLaNube();
+                bienvenidaUsuario();
+            }
+        }).catch((error) => {
+            alert("❌ ERROR DE FIREBASE:\n\n" + error.message + "\n\nRevisa las Reglas de Firestore.");
+            document.getElementById('loading-login').style.display = 'none';
+        });
+    }
+
+    function bienvenidaUsuario() {
+        document.getElementById('screen-login').classList.remove('active');
+        document.getElementById('screen-app').classList.add('active');
+        playSound('success');
+        
+        document.getElementById('ui-name').innerText = user.nombres;
+        document.getElementById('ui-score').innerText = user.score;
+        
+        loadWeek(); // Cargar la semana seleccionada ahora que hay datos
+    }
+
+    function guardarProgresoEnLaNube(mostrarToast = false) {
+        if(user && user.email) {
+            firestore.collection("estudiantes").doc(user.email).set(user)
+            .then(() => {
+                if(mostrarToast) {
+                    const t = document.getElementById('toast-msg');
+                    t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
+                }
+            })
+            .catch(e => console.error(e));
+        }
+    }
+
+    function logout() { 
+        auth.signOut().then(() => {
+            user = null; 
+            document.getElementById('screen-app').classList.remove('active');
+            document.getElementById('screen-login').classList.add('active');
+        });
+    }
+
+    /* ========================================================================= */
+    /* 4. BASE DE DATOS LOCAL DE RETOS WOKWI                                     */
+    /* ========================================================================= */
+    const weeks = {
+        1: {
+            title: "Primer Contacto (LED)",
+            challenge: "Simula el código base. Luego, supera los retos evaluando tu código.",
+            components: ["Arduino", "LED", "Resistor"],
+            wiring: ["PIN 13 -> Ánodo LED", "Cátodo LED -> Resistencia -> GND"],
+            code: `void setup() {\n  pinMode(13, OUTPUT);\n}\nvoid loop() {\n  digitalWrite(13, HIGH);\n  delay(1000);\n  digitalWrite(13, LOW);\n  delay(1000);\n}`,
+            retos: {
+                basico: { desc: "Agrega un 2do LED en el PIN 12. Enciéndelos a la vez.", match: ["12,OUTPUT", "digitalWrite(12,HIGH)"] },
+                alto: { desc: "Haz que parpadeen de forma ALTERNADA (uno prendido, otro apagado).", match: ["13,HIGH", "12,LOW"] },
+                superior: { desc: "Efecto 'Latido': Dos parpadeos rápidos (50ms) y una pausa larga (1000ms o más).", match: ["delay(50)"] }
+            }
+        },
+        2: {
+            title: "Semáforo Inteligente",
+            challenge: "Programa un semáforo de 3 colores funcional.",
+            components: ["3x LED", "3x Resistor"],
+            wiring: ["Verde a PIN 2, Amarillo a PIN 3, Rojo a PIN 4."],
+            code: `int verde = 2, amarillo = 3, rojo = 4;\nvoid setup() {\n  pinMode(verde, OUTPUT);\n  pinMode(amarillo, OUTPUT);\n  pinMode(rojo, OUTPUT);\n}\nvoid loop() {\n  digitalWrite(verde, HIGH);\n  delay(3000);\n  digitalWrite(verde, LOW);\n}`,
+            retos: {
+                basico: { desc: "El Verde debe parpadear (con delays cortos de 200 o 300ms) antes de pasar al amarillo.", match: ["delay(200)", "delay(300)"] },
+                alto: { desc: "Añade una luz de giro (PIN 5) que acompañe al verde.", match: ["5,OUTPUT"] },
+                superior: { desc: "Agrega un Buzzer (PIN 9) que suene cuando el semáforo esté en Rojo.", match: ["9,OUTPUT"] }
+            }
+        },
+        3: {
+            title: "Botón de Pánico",
+            challenge: "Aprende a leer el estado de un botón (Entrada).",
+            components: ["Pushbutton", "LED"],
+            wiring: ["LED al PIN 8", "Botón al PIN 7 (usa INPUT_PULLUP)"],
+            code: `void setup() { pinMode(8, OUTPUT); pinMode(7, INPUT_PULLUP); }\nvoid loop() {\n  if(digitalRead(7) == LOW) { digitalWrite(8, HIGH); }\n  else { digitalWrite(8, LOW); }\n}`,
+            retos: {
+                basico: { desc: "Agrega otro LED (PIN 9). Si presionas, prende el 9 y apaga el 8. Si no, al revés.", match: ["9,OUTPUT", "digitalWrite(9,HIGH)"] },
+                alto: { desc: "Al presionar, el LED debe parpadear simulando alarma (usando delay).", match: ["delay("] },
+                superior: { desc: "Hazlo un interruptor Toggle (requiere una variable de estado booleana).", match: ["boolean", "bool", "!"] }
+            }
+        },
+        4: {
+            title: "Dimmer Analógico",
+            challenge: "Convierte señales analógicas en PWM.",
+            components: ["Potenciómetro", "LED"],
+            wiring: ["Potenciómetro centro a A0", "LED a PIN 3 (~PWM)"],
+            code: `void setup() { pinMode(3, OUTPUT); }\nvoid loop() {\n  int val = analogRead(A0);\n  int brillo = map(val, 0, 1023, 0, 255);\n  analogWrite(3, brillo);\n}`,
+            retos: {
+                basico: { desc: "Añade un 2do LED en PIN 5. Cuando uno brilla, el otro se apaga.", match: ["5,OUTPUT", "255-brillo"] },
+                alto: { desc: "Si la lectura es < 512, apaga el LED por completo.", match: ["<512"] },
+                superior: { desc: "Cambia el LED por un Buzzer (PIN 9). Si pasa de 800, haz que suene.", match: [">800", "tone("] }
+            }
+        },
+        5: {
+            title: "Sintetizador (Buzzer)",
+            challenge: "Usa tone() para crear frecuencias.",
+            components: ["Buzzer"],
+            wiring: ["Positivo a PIN 9", "Negativo a GND"],
+            code: `void setup() { pinMode(9, OUTPUT); }\nvoid loop() {\n  tone(9, 1000);\n  delay(500);\n  noTone(9);\n  delay(500);\n}`,
+            retos: {
+                basico: { desc: "Alarma ambulancia: 500Hz medio seg, y luego 1000Hz medio seg.", match: ["tone(9,500)", "tone(9,1000)"] },
+                alto: { desc: "Melodía de 3 notas con diferentes frecuencias.", match: ["tone(", "tone(", "tone("] },
+                superior: { desc: "Integra un botón en PIN 7. Solo suena si está presionado.", match: ["7,INPUT", "digitalRead(7)"] }
+            }
+        },
+        6: {
+            title: "Radar Automotriz",
+            challenge: "Mide distancias con el sensor HC-SR04.",
+            components: ["HC-SR04", "LED"],
+            wiring: ["Trig 10, Echo 11, LED 13"],
+            code: `long leer() {\n digitalWrite(10,LOW); delayMicroseconds(2); digitalWrite(10,HIGH); delayMicroseconds(10); digitalWrite(10,LOW); return pulseIn(11,HIGH)*0.034/2;\n}\nvoid setup() { pinMode(10,OUTPUT); pinMode(11,INPUT); pinMode(13,OUTPUT); }\nvoid loop() {\n if(leer() < 50) digitalWrite(13,HIGH); else digitalWrite(13,LOW); \n}`,
+            retos: {
+                basico: { desc: "Usa un LED Verde (PIN 12) para indicar que está libre (>= 50).", match: ["12,OUTPUT", "digitalWrite(12,HIGH)"] },
+                alto: { desc: "Agrega un Buzzer (PIN 9) que suene cuando detecte < 50cm.", match: ["9,OUTPUT", "tone(", "9,HIGH"] },
+                superior: { desc: "Sensor Reversa: Diferentes velocidades de beep según la distancia.", match: ["delay(leer"] }
+            }
+        },
+        7: {
+            title: "Barrera de Peaje",
+            challenge: "Controla ángulos de un Servomotor.",
+            components: ["Servo", "Botón"],
+            wiring: ["Servo Señal a 9, Botón a 2"],
+            code: `#include <Servo.h>\nServo motor;\nvoid setup() { motor.attach(9); pinMode(2, INPUT_PULLUP); motor.write(0); }\nvoid loop() {\n if(digitalRead(2)==LOW) { motor.write(90); delay(3000); motor.write(0); delay(500); }\n}`,
+            retos: {
+                basico: { desc: "Añade un LED Rojo en PIN 4 (cerrado) y Verde en PIN 5 (abierto).", match: ["4,OUTPUT", "5,OUTPUT"] },
+                alto: { desc: "Controla el servo con un potenciómetro (A0) usando map().", match: ["analogRead(A0)", "map("] },
+                superior: { desc: "Peaje Automático: Ábrelo usando el HC-SR04 (Trig 10, Echo 11) a <30cm.", match: ["pulseIn", "<30"] }
+            }
+        },
+        8: {
+            title: "Estación Climática",
+            challenge: "Lee sensores complejos (DHT22).",
+            components: ["DHT22"],
+            wiring: ["DHT22 Data a PIN 2"],
+            code: `#include "DHT.h"\nDHT dht(2, DHT22);\nvoid setup() { Serial.begin(9600); dht.begin(); }\nvoid loop() {\n float t = dht.readTemperature();\n Serial.println(t);\n delay(2000);\n}`,
+            retos: {
+                basico: { desc: "Alarma Calor: LED PIN 13 si t > 30°C.", match: ["13,OUTPUT", ">30"] },
+                alto: { desc: "Imprime 'ALERTA DE CALOR' en el monitor serial.", match: ["Serial.print", "ALERTA"] },
+                superior: { desc: "Termostato: Activa un Servo en PIN 9 si t > 25°C.", match: ["Servo.h", ">25", "attach(9)"] }
+            }
+        },
+        9: {
+            title: "Panel Publicitario",
+            challenge: "Muestra texto en pantalla LCD I2C.",
+            components: ["LCD I2C"],
+            wiring: ["SDA a A4, SCL a A5"],
+            code: `#include <LiquidCrystal_I2C.h>\nLiquidCrystal_I2C lcd(0x27,16,2);\nvoid setup() { lcd.init(); lcd.backlight(); lcd.setCursor(0,0); lcd.print("Hola Mundo"); }\nvoid loop() {}`,
+            retos: {
+                basico: { desc: "Haz que el texto parpadee dentro del loop() usando lcd.clear().", match: ["clear()", "delay("] },
+                alto: { desc: "Crea un conteo regresivo visual: 3, 2, 1, Despegue.", match: ["print(\"3\")", "print(\"2\")"] },
+                superior: { desc: "Muestra la lectura de un potenciómetro (A0) en la pantalla.", match: ["analogRead(A0)", "print("] }
+            }
+        },
+        10: {
+            title: "BOSS FINAL",
+            challenge: "Kiosco Interactivo (Servo + HC-SR04).",
+            components: ["HC-SR04", "Servo", "Buzzer", "LCD"],
+            wiring: ["Múltiple (Integra todo)"],
+            code: `#include <Servo.h>\nServo t; long leer() { digitalWrite(10,LOW); delayMicroseconds(2); digitalWrite(10,HIGH); delayMicroseconds(10); digitalWrite(10,LOW); return pulseIn(11,HIGH)*0.034/2; }\nvoid setup() { t.attach(9); pinMode(10,OUTPUT); pinMode(11,INPUT); t.write(0); }\nvoid loop() { if(leer()<20){ t.write(90); delay(3000); t.write(0); } delay(100); }`,
+            retos: {
+                basico: { desc: "Integra LCD: 'Cerrado' o 'Abierto'.", match: ["LiquidCrystal", "print("] },
+                alto: { desc: "Integra Buzzer (PIN 8) un 'Beep' al abrir.", match: ["8,OUTPUT", "tone(", "8,HIGH"] },
+                superior: { desc: "Flujo completo: Acérquese -> Beep -> Abre -> Depositando -> Cierra -> Gracias.", match: ["delay(", "write(90)"] }
+            }
+        }
+    };
+
+    const mensajesExito = ["¡Excelente deducción!", "¡Felicidades! Lógica perfecta.", "¡Aprender haciendo! Buen trabajo.", "¡Brillante estructuración!", "¡Mentalidad de ingeniero activada!"];
+    const mensajesFallo = ["¡Casi! Revisa la sintaxis detalladamente.", "El error es tu mejor maestro. ¡Inténtalo de nuevo!", "Pista: Lee qué instrucción exacta te pide el reto.", "Verifica mayúsculas y minúsculas (ej. HIGH/LOW).", "Asegúrate de poner punto y coma (;) al final."];
+
+    /* ========================================================================= */
+    /* 5. MOTOR DE INTERFAZ Y AUTO-GRADER                                        */
+    /* ========================================================================= */
+    function loadWeek() {
+        if(!user) return; // Si no hay usuario logueado, no cargar.
+
+        const w = document.getElementById('week-select').value;
+        const d = weeks[w];
+        
+        document.getElementById('w-title').innerText = `Misión: ${d.title}`;
+        document.getElementById('w-challenge').innerText = d.challenge;
+        document.getElementById('w-components').innerHTML = d.components.map(c => `<span class="tag">${c}</span>`).join('');
+        document.getElementById('w-wiring').innerHTML = d.wiring.map(wi => `<li>${wi}</li>`).join('');
+        document.getElementById('w-code').innerText = d.code;
+        
+        levels.forEach(lvl => {
+            document.getElementById(`r-desc-${lvl}`).innerText = d.retos[lvl].desc;
+            document.getElementById(`input-${lvl}`).value = ""; 
+            document.getElementById(`feedback-${lvl}`).style.display = "none";
+            document.getElementById(`btn-${lvl}`).disabled = false;
+        });
+
+        // Cargar desde Firebase
+        if (!user.progress[w]) {
+            user.progress[w] = { lvl: 0, lives: 3 };
+        }
+        currentLvlIndex = user.progress[w].lvl;
+        currentLives = user.progress[w].lives;
+
+        applyUI();
+    }
+
+    function updateLivesDisplay(lvl) {
+        const heartsText = "❤️".repeat(currentLives) + "🖤".repeat(3 - currentLives);
+        document.getElementById(`vidas-${lvl}`).innerText = heartsText;
+    }
+
+    function applyUI() {
+        document.getElementById('msg-victoria').style.display = 'none';
+
+        levels.forEach((lvl, index) => {
+            const container = document.getElementById(`r-container-${lvl}`);
+            const evalBox = document.getElementById(`eval-${lvl}`);
+            const doneBadge = document.getElementById(`done-${lvl}`);
+            const btn = document.getElementById(`btn-${lvl}`);
+            const fb = document.getElementById(`feedback-${lvl}`);
+
+            if (index < currentLvlIndex) {
+                container.style.display = 'block';
+                evalBox.style.display = 'none';
+                doneBadge.style.display = 'flex';
+            } else if (index === currentLvlIndex) {
+                container.style.display = 'block';
+                evalBox.style.display = 'block';
+                doneBadge.style.display = 'none';
+                updateLivesDisplay(lvl);
+
+                if (currentLives <= 0) {
+                    btn.disabled = true;
+                    fb.className = "feedback error";
+                    fb.innerHTML = "💀 <strong>Te has quedado sin vidas.</strong> <br><br> <span class='msg-pedagogico'>Recuerda que la programación requiere paciencia. Pulsa 'Reiniciar Nivel' arriba para intentarlo desde cero.</span>";
+                    fb.style.display = "block";
+                }
+            } else {
+                container.style.display = 'none';
+            }
+        });
+
+        if (currentLvlIndex >= levels.length) document.getElementById('msg-victoria').style.display = 'block';
+    }
+
+    function limpiarComentarios(codigo) { return codigo.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "").trim(); }
+
+    function testearCodigoLocal(codigo, matchers) {
+        let sinEspacios = codigo.replace(/\s+/g, '');
+        if(!sinEspacios.includes("setup()") || !sinEspacios.includes("loop()")) return { aprobado: false, msg: "Faltan las funciones setup() o loop()." };
+        for (let palabra of matchers) {
+            let pSinEspacios = palabra.replace(/\s+/g, '');
+            if(pSinEspacios === "delay(200)" || pSinEspacios === "delay(300)") {
+                if(!sinEspacios.includes("delay(200)") && !sinEspacios.includes("delay(300)")) return { aprobado: false, msg: "Falta el delay() solicitado." };
+                continue;
+            }
+            if (!sinEspacios.includes(pSinEspacios)) return { aprobado: false, msg: "Falta una instrucción o parámetro exigido." };
+        }
+        return { aprobado: true, msg: "Lógica implementada correctamente." };
+    }
+
+    function verifyCode(level) {
+        if (currentLives <= 0) return;
+        const w = document.getElementById('week-select').value;
+        const rawCode = document.getElementById(`input-${level}`).value;
+        const fb = document.getElementById(`feedback-${level}`);
+        const btn = document.getElementById(`btn-${level}`);
+
+        if (rawCode.trim() === "") {
+            fb.className = "feedback error"; fb.innerText = "❌ Escribe o pega tu código primero."; fb.style.display="block"; playSound('error'); return;
+        }
+
+        const cleanCode = limpiarComentarios(rawCode);
+        const originalBtnText = btn.innerText;
+        btn.disabled = true; btn.innerText = "⚙️ Evaluando lógica...";
+        fb.style.display = "block"; fb.className = "feedback loading"; fb.innerText = "Analizando tu solución paso a paso...";
+
+        setTimeout(() => {
+            const retoActual = weeks[w].retos[level];
+            const resultado = testearCodigoLocal(cleanCode, retoActual.match);
+            const msjPedagogico = resultado.aprobado ? mensajesExito[Math.floor(Math.random() * mensajesExito.length)] : mensajesFallo[Math.floor(Math.random() * mensajesFallo.length)];
+
+            if (resultado.aprobado) {
+                playSound('success');
+                fb.className = "feedback success";
+                fb.innerHTML = `✅ <strong>¡Superado!</strong> ${resultado.msg}<br><span class="msg-pedagogico">${msjPedagogico}</span>`;
+                
+                // Dar Experiencia (XP) y actualizar Firebase
+                let xpGanada = level === 'basico' ? 50 : (level === 'alto' ? 100 : 200);
+                user.score += xpGanada;
+                document.getElementById('ui-score').innerText = user.score;
+
+                currentLives = 3; 
+                currentLvlIndex++;
+                user.progress[w].lvl = currentLvlIndex;
+                user.progress[w].lives = currentLives;
+                
+                guardarProgresoEnLaNube(true); // Guarda y muestra toast
+
+                setTimeout(() => {
+                    if(level === 'superior') safeConfetti();
+                    applyUI();
+                }, 2000);
+
+            } else {
+                playSound('error');
+                currentLives--;
+                user.progress[w].lives = currentLives;
+                guardarProgresoEnLaNube(false);
+                updateLivesDisplay(level);
+
+                fb.className = "feedback error";
+                if (currentLives > 0) {
+                    fb.innerHTML = `❌ <strong>Algo falta:</strong> ${resultado.msg}<br><br>Tienes ${currentLives} intento(s) más. <br><span class="msg-pedagogico">${msjPedagogico}</span>`;
+                } else {
+                    fb.innerHTML = `💀 <strong>Agotaste tus intentos.</strong> ${resultado.msg}<br><br><span class="msg-pedagogico">Presiona 'Reiniciar Nivel' arriba para analizar el problema desde otro ángulo.</span>`;
+                    document.getElementById(`btn-${level}`).disabled = true;
+                }
+            }
+
+            if (currentLives > 0) { btn.disabled = false; btn.innerText = originalBtnText; }
+        }, 800);
+    }
+
+    function resetProgress() {
+        if(confirm("¿Quieres reiniciar los retos de esta semana y recuperar tus vidas?")) {
+            const w = document.getElementById('week-select').value;
+            user.progress[w] = { lvl: 0, lives: 3 };
+            guardarProgresoEnLaNube(true);
+            loadWeek();
+        }
+    }
+
+    function copyCode() {
+        navigator.clipboard.writeText(document.getElementById('w-code').innerText).then(() => {
+            const b = document.getElementById('btnCopy'); b.innerText = "✅"; setTimeout(() => b.innerText = "📋 Copiar", 1500);
+        });
+    }
+
+    /* ========================================================================= */
+    /* 6. GENERADOR DE PDF OFICIAL (ADAPTADO A 10 SEMANAS)                       */
+    /* ========================================================================= */
+    function generatePDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const w = doc.internal.pageSize.getWidth(); const h = doc.internal.pageSize.getHeight();
+
+        let totalSemanasCompletas = 0;
+        for(let i=1; i<=10; i++) { if(user.progress[i] && user.progress[i].lvl >= 3) totalSemanasCompletas++; }
+        const isGraduated = totalSemanasCompletas >= 10;
+
+        doc.setFillColor(15, 23, 42); doc.rect(0, 0, w, h, 'F');
+        doc.setDrawColor(47, 129, 247); doc.setLineWidth(2); doc.rect(5, 5, w - 10, h - 10);
+
+        doc.setTextColor(47, 129, 247); doc.setFont("helvetica", "bold"); doc.setFontSize(isGraduated ? 30 : 24);
+        doc.text(isGraduated ? "CERTIFICADO DE EXCELENCIA WOKWI" : "REPORTE DE PROGRESO - WOKWI ACADEMY", w / 2, 30, { align: "center" });
+
+        doc.setTextColor(255, 255, 255); doc.setFontSize(14);
+        let subTitle = isGraduated ? "Por completar los 10 retos de automatización en simulación, se otorga a:" : "Certificado de avance en las misiones de hardware para:";
+        doc.text(subTitle, w / 2, 45, { align: "center" });
+
+        doc.setFontSize(35); doc.setTextColor(35, 134, 54); 
+        doc.text(user.nombres.toUpperCase(), w / 2, 60, { align: "center" });
+
+        doc.setFontSize(14); doc.setTextColor(255, 255, 255);
+        doc.text(`Grado/Curso: ${user.grado} | ITS Pereira`, w / 2, 70, { align: "center" });
+
+        doc.setTextColor(214, 158, 46); doc.setFontSize(13);
+        doc.text(`Misiones Superadas: ${totalSemanasCompletas}/10 | Experiencia Total: ${user.score} XP`, w / 2, 80, { align: "center" });
+
+        doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.5); doc.line(30, 88, w - 30, 88);
+        
+        doc.setFontSize(10); doc.setTextColor(139, 148, 158);
+        doc.text("Director de Tecnología", 75, h - 30, { align: "center" });
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-CO')}`, w - 75, h - 30, { align: "center" });
+
+        doc.setFontSize(8); doc.setTextColor(72, 79, 88);
+        const token = btoa(user.email).substring(0, 10).toUpperCase();
+        doc.text(`CÓDIGO DE SEGURIDAD NUBE: WK-P-${token}`, w / 2, h - 12, { align: "center" });
+
+        let safeName = user.nombres.replace(/\s+/g, '_');
+        doc.save(isGraduated ? `Diploma_Wokwi_${safeName}.pdf` : `Reporte_Wokwi_${safeName}.pdf`);
+    }
+</script>
+</body>
+</html>
