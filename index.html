@@ -289,6 +289,14 @@
     function cargarDatosDeLaNube(googleUser) {
         if (!googleUser || !googleUser.email) return;
 
+        // 🛡️ FILTRO DE CORREO INSTITUCIONAL ITS PEREIRA
+        if (!googleUser.email.endsWith("@itspereira.edu.co")) {
+            
+            alert("⛔ ACCESO DENEGADO.\n\nSolo puedes ingresar a Wokwi Academy utilizando tu correo institucional (@itspereira.edu.co).");
+            logout(); // Cierra la sesión del intruso inmediatamente
+            return; // Detiene el código
+        }
+
         firestore.collection("estudiantes").doc(googleUser.email).get().then((doc) => {
             if (doc.exists) {
                 user = doc.data();
